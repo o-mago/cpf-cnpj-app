@@ -27,6 +27,13 @@ import MenuItem from '@material-ui/core/MenuItem';
 import FormHelperText from '@material-ui/core/FormHelperText';
 import FormControl from '@material-ui/core/FormControl';
 import Select from '@material-ui/core/Select';
+import Dialog from '@material-ui/core/Dialog';
+import DialogActions from '@material-ui/core/DialogActions';
+import DialogContent from '@material-ui/core/DialogContent';
+import DialogContentText from '@material-ui/core/DialogContentText';
+import DialogTitle from '@material-ui/core/DialogTitle';
+import Slide from '@material-ui/core/Slide';
+import Button from '@material-ui/core/Button';
 import { docMask } from '../utils/masks';
 import { docValidator } from '../utils/validators';
 
@@ -38,12 +45,16 @@ import { docValidator } from '../utils/validators';
 //   }
 // }))(InputLabel);
 
+const Transition = React.forwardRef(function Transition(props, ref) {
+  return <Slide direction="up" ref={ref} {...props} />;
+});
+
 const useStyles = makeStyles((theme) => ({
   paper: {
     padding: '2px 4px',
     display: 'flex',
     alignItems: 'center',
-    width: '80%',
+    width: '50%'
   },
   list: {
     width: '100%',
@@ -83,7 +94,19 @@ const useStyles = makeStyles((theme) => ({
   },
   listSubHeader: {
     display: 'flex',
+    justifyContent: 'space-between',
+    color: '#ffffff',
+    backgroundColor: '#3f51b5'
+  },
+  paperRoot: {
+    overflow: 'hidden'
+  },
+  listItem: {
+    display: 'flex',
     justifyContent: 'space-between'
+  },
+  listItemText: {
+    maxWidth: '50%'
   }
 }), {
   name: "MuiCustomStyle"
@@ -95,13 +118,13 @@ export default function Home({ allPostsData }) {
   const { data, error } = {
     data: {
       documents: [{
-        number: "157896482",
+        number: "15789648212",
         blacklist: true,
       }, {
-        number: "136478524",
+        number: "13647852425",
         blacklist: false
       }, {
-        number: "1346826419276",
+        number: "13468264192765",
         blacklist: false
       }]
     },
@@ -109,6 +132,8 @@ export default function Home({ allPostsData }) {
   };
 
   const [filter, setFilter] = useState('');
+
+  const [openDialog, setOpenDialog] = useState(false);
 
   const [checked, setChecked] = useState(data.documents.reduce((acc, elem) => {
     if (elem.blacklist) {
@@ -132,6 +157,25 @@ export default function Home({ allPostsData }) {
 
     setChecked(newChecked);
   };
+
+  const addDoc = (event) => {
+    if(!validDoc) {
+      setOpenDialog(true);
+    }
+  }
+
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+  };
+
+  const getDocType = (doc) => {
+    console.log(doc, doc.length);
+    if(doc.length === 11) {
+      return "CPF";
+    } else if(doc.length === 14) {
+      return "CNPJ";
+    }
+  }
 
   // const getListItems = (documents) => {
   //   return documents.reduce((acc, doc, index) => {
@@ -220,7 +264,7 @@ return (
           <SearchIcon />
         </IconButton>
         <Divider className={classes.divider} orientation="vertical" />
-        <IconButton color="primary" className={classes.iconButton} aria-label="directions">
+        <IconButton color="primary" className={classes.iconButton} aria-label="directions" onClick={addDoc}>
           <AddIcon />
         </IconButton>
         <Divider className={classes.divider} orientation="vertical" />
@@ -263,27 +307,28 @@ return (
       </Paper>
     </Box>
     {/* {!validDoc ? ( */}
-    <Box width="80%">
+    <Box width="50%">
       <p className={`${classes.errorText} ${validDoc ? classes.hidden : ''}`}>Documento inválido</p>
     </Box>
     <Box mt={5} pr={20} pl={20} className={classes.list}>
-      <Paper>
+      <Paper classes={{root: classes.paperRoot}}>
         <List
           subheader={
             <ListSubheader classes={{ root: classes.listSubHeader }} id="nested-list-subheader">
-              <p>Documentos</p><p>Blacklist</p>
+              <p classes={{root: classes.listItem}}>Documentos</p><p>Tipo</p><p>Blacklist</p>
             </ListSubheader>
           }>
           {data.documents.map((doc, index) => 
           <>
-          <ListItem key={index}>
-            <ListItemText id="switch-list-label-wifi" primary={docMask(doc.number)} />
-            <ListItemSecondaryAction>
+          <ListItem key={index} classes={{root: classes.listItem}}>
+            <ListItemText id="switch-list-label-number" primary={docMask(doc.number)} classes={{root: classes.listItemText}} />
+            <ListItemText id="switch-list-label-type" primary={getDocType(doc.number)} classes={{root: classes.listItemText}} />
+            <ListItemSecondaryAction key={index} classes={{root: classes.listItemText}}>
               <Switch
                 edge="end"
                 onChange={handleToggle(doc.number)}
                 checked={checked.indexOf(doc.number) !== -1}
-                inputProps={{ 'aria-labelledby': 'switch-list-label-wifi' }}
+                inputProps={{ 'aria-labelledby': 'switch-list-label-number' }}
               />
             </ListItemSecondaryAction>
             <Divider className={classes.divider} orientation="horizontal" />
@@ -293,6 +338,26 @@ return (
         </List>
       </Paper>
     </Box>
+    <Dialog
+        open={openDialog}
+        TransitionComponent={Transition}
+        keepMounted
+        onClose={handleCloseDialog}
+        aria-labelledby="alert-dialog-slide-title"
+        aria-describedby="alert-dialog-slide-description"
+      >
+        <DialogTitle id="alert-dialog-slide-title">Documento inválido</DialogTitle>
+        <DialogContent>
+          <DialogContentText id="alert-dialog-slide-description">
+            Documento não pode ser adicionado
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog} color="primary">
+            Fechar
+          </Button>
+        </DialogActions>
+      </Dialog>
   </Box>
   // <Layout home>
   //   <Head>…</Head>
