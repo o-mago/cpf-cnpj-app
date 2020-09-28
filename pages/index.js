@@ -1,30 +1,20 @@
-import Head from 'next/head';
-import Layout, { siteTitle } from '../components/layout';
-import utilStyles from '../styles/utils.module.css';
-// import { getSortedPostsData } from '../lib/posts'
-// import useSWR from 'swr'
+import useSWR from 'swr';
 import { useState } from 'react';
-import { makeStyles, withStyles } from '@material-ui/core/styles';
+import { makeStyles } from '@material-ui/core/styles';
 import List from '@material-ui/core/List';
 import Box from '@material-ui/core/Box';
 import ListItem from '@material-ui/core/ListItem';
-import ListItemIcon from '@material-ui/core/ListItemIcon';
 import ListItemSecondaryAction from '@material-ui/core/ListItemSecondaryAction';
 import ListItemText from '@material-ui/core/ListItemText';
 import ListSubheader from '@material-ui/core/ListSubheader';
 import Switch from '@material-ui/core/Switch';
 import Paper from '@material-ui/core/Paper';
 import IconButton from '@material-ui/core/IconButton';
-import MenuIcon from '@material-ui/icons/Menu';
 import SearchIcon from '@material-ui/icons/Search';
 import AddIcon from '@material-ui/icons/Add';
-import BlockIcon from '@material-ui/icons/Block';
-import DirectionsIcon from '@material-ui/icons/Directions';
 import InputBase from '@material-ui/core/InputBase';
 import Divider from '@material-ui/core/Divider';
-import InputLabel from '@material-ui/core/InputLabel';
 import MenuItem from '@material-ui/core/MenuItem';
-import FormHelperText from '@material-ui/core/FormHelperText';
 import FormControl from '@material-ui/core/FormControl';
 import Select from '@material-ui/core/Select';
 import Dialog from '@material-ui/core/Dialog';
@@ -36,14 +26,7 @@ import Slide from '@material-ui/core/Slide';
 import Button from '@material-ui/core/Button';
 import { docMask } from '../utils/masks';
 import { docValidator } from '../utils/validators';
-
-// import NotInterestedIcon from '@material-ui/icons/NotInterested';
-
-// const CustomInputLabel = withStyles(theme => ({
-//   formControl: {
-//     transform: 'translate(0, 10px) scale(1)'
-//   }
-// }))(InputLabel);
+import Skeleton from '@material-ui/lab/Skeleton';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
@@ -112,55 +95,64 @@ const useStyles = makeStyles((theme) => ({
   name: "MuiCustomStyle"
 });
 
-export default function Home({ allPostsData }) {
-  // const { data, error } = useSWR('/api/user', fetch);
-  const classes = useStyles();
-  const { data, error } = {
-    data: {
-      documents: [{
-        number: "15789648212",
-        blacklist: true,
-      }, {
-        number: "13647852425",
-        blacklist: false
-      }, {
-        number: "13468264192765",
-        blacklist: false
-      }]
-    },
-    error: false
+export default function Home() {
+
+  const [searchPayload, setSearchPayload] = useState({
+    limit: 8,
+    page: 1
+  });
+  const fetcher = (url, payload) => {
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    }).then((res) => res.json())
   };
 
+  const { data, error, mutate, isValidating } = useSWR([`${process.env.NEXT_PUBLIC_API_URL}/getDocuments`, searchPayload], (url, payload) => fetcher(url, payload));
+  const [page, setpage] = useState(1);
+  const [limitPerPage, setlimitPerPage] = useState(8);
+  const [skelLine, setSkelLine] = useState(Array.from(Array(limitPerPage).keys()));
+
+  const classes = useStyles();
+
   const [filter, setFilter] = useState('');
+  const [sort, setSort] = useState('');
 
   const [openDialog, setOpenDialog] = useState(false);
-
-  const [checked, setChecked] = useState(data.documents.reduce((acc, elem) => {
-    if (elem.blacklist) {
-      acc.push(elem.number);
-    }
-    return acc;
-  }, []));
 
   const [doc, setDoc] = useState('');
   const [validDoc, setValidDoc] = useState(true);
 
-  const handleToggle = (value) => () => {
-    const currentIndex = checked.indexOf(value);
-    const newChecked = [...checked];
-
-    if (currentIndex === -1) {
-      newChecked.push(value);
-    } else {
-      newChecked.splice(currentIndex, 1);
-    }
-
-    setChecked(newChecked);
+  const handleToggle = async (doc) => {
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/updateDocument`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({_id: doc._id, blacklist: !doc.blacklist})
+    }).then((res) => res.json())
+    mutate(data.map(elem => elem._id === doc._id ? {...elem, blacklist: !elem.blacklist} : elem));
   };
 
-  const addDoc = (event) => {
-    if(!validDoc) {
+  const addDoc = async (event) => {
+    if ((doc.length > 0 && !validDoc) || doc.length === 0) {
       setOpenDialog(true);
+    } else {
+      let formatedDoc = doc.replace(/\D/g,"");
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/addDocument`, {
+        method: 'PUT',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({document: doc})
+      }).then((res) => res.json())
+      mutate([...data, {document: formatedDoc, blacklist: false}]);
     }
   }
 
@@ -169,176 +161,154 @@ export default function Home({ allPostsData }) {
   };
 
   const getDocType = (doc) => {
-    console.log(doc, doc.length);
-    if(doc.length === 11) {
+    if (doc.length === 11) {
       return "CPF";
-    } else if(doc.length === 14) {
+    } else if (doc.length === 14) {
       return "CNPJ";
     }
   }
 
-  // const getListItems = (documents) => {
-  //   return documents.reduce((acc, doc, index) => {
-  //     let show = false;
-  //     switch (filter) {
-  //       case 'CPF':
-  //         if (doc.number.length === 11) {
-  //           show = true;
-  //         } else {
-  //           show = false;
-  //         }
-  //       case 'CNPJ':
-  //         if (doc.number.length === 14) {
-  //           show = true;
-  //         } else {
-  //           show = false;
-  //         }
-  //       case 'Blacklist':
-  //         if (doc.blacklist) {
-  //           show = true;
-  //         } else {
-  //           show = false;
-  //         }
-  //       default:
-  //         show = true;
-  //     }
-
-  //     console.log("sadsad", doc);
-      
-  //     if(show) {
-  //       acc.push((<>
-  //         <ListItem key={index}>
-  //           <ListItemText id="switch-list-label-wifi" primary={docMask(doc.number)} />
-  //           <ListItemSecondaryAction>
-  //             <Switch
-  //               edge="end"
-  //               onChange={handleToggle(doc.number)}
-  //               checked={checked.indexOf(doc.number) !== -1}
-  //               inputProps={{ 'aria-labelledby': 'switch-list-label-wifi' }}
-  //             />
-  //           </ListItemSecondaryAction>
-  //           <Divider className={classes.divider} orientation="horizontal" />
-  //         </ListItem>
-  //         {index !== data.documents.length - 1 ? (<Divider className={classes.horizontalDivider} orientation="horizontal" />) : (<></>)}
-  //       </>))
-  //     }
-  //     return acc;
-  //   }, []);
-  // };
-
-  const [listedDocuments, setListedDocuments] = useState(data.documents);
-
   const handleChange = (event) => {
     setFilter(event.target.value);
-    // setListedDocuments(data.documents);
+    setSearchPayload({
+      [event.target.value]: true,
+      sort: sort,
+      page: page,
+      limit: limitPerPage,
+      search: stringNumber(doc)
+    });
+    mutate();
   };
 
-  const handleSortChange = () => {
-    
+  const searchDoc = () => {
+    setSearchPayload({...searchPayload, search: stringNumber(doc)});
+    mutate();
+  }
+
+  const handleSortChange = (event) => {
+    setSort(event.target.value);
+    setSearchPayload({...searchPayload, sort: event.target.value});
+    mutate();
   }
 
   const checkDoc = (event) => {
     let maskedDoc = docMask(event.target.value);
     setDoc(maskedDoc);
-    setValidDoc(docValidator(maskedDoc));
+    if(event.target.value.length > 0) {
+      setValidDoc(docValidator(maskedDoc));
+    } else {
+      setValidDoc(true);
+    }
   }
 
-  
+  const stringNumber = (str) => {
+    return str.replace(/\D/g,"");
+  }
 
-if (error) return <div>failed to load</div>
-if (!data) return <div>loading...</div>
+  if (error) return <div>failed to load</div>
 
-return (
-  <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" width="100%">
-    <Box mt={5} display="flex" flexDirection="column" justifyContent="center" alignItems="center" width="100%">
-      <Paper component="form" className={classes.paper}>
-        <InputBase
-          className={classes.input}
-          placeholder="Insira o CPF ou CNPJ"
-          onChange={checkDoc}
-          value={doc}
-          error={!validDoc}
-          inputProps={{ 'aria-label': 'filter-cpf-cnpj' }}
-        />
-        <IconButton type="submit" className={classes.iconButton} aria-label="search">
-          <SearchIcon />
-        </IconButton>
-        <Divider className={classes.divider} orientation="vertical" />
-        <IconButton color="primary" className={classes.iconButton} aria-label="directions" onClick={addDoc}>
-          <AddIcon />
-        </IconButton>
-        <Divider className={classes.divider} orientation="vertical" />
-        <FormControl className={classes.formControl}>
-          {/* <InputLabel shrink id="filter-label" classes={{ formControl: classes.filter }}>Filtro</InputLabel> */}
-          <Select
-            labelId="filter-label"
-            id="demo-simple-select"
-            value={filter}
-            displayEmpty
-            onChange={handleChange}
-            input={<InputBase />}
-          >
-            <MenuItem value="">
-              <em>Filtro</em>
-            </MenuItem>
-            <MenuItem value={"CPF"}>CPF</MenuItem>
-            <MenuItem value={"CNPJ"}>CNPJ</MenuItem>
-            <MenuItem value={"Blacklist"}>Blacklist</MenuItem>
-          </Select>
-        </FormControl>
-        <Divider className={classes.divider} orientation="vertical" />
-        <FormControl className={classes.formControl}>
-          {/* <InputLabel shrink id="filter-label" classes={{ formControl: classes.filter }}>Filtro</InputLabel> */}
-          <Select
-            labelId="filter-label"
-            id="demo-simple-select"
-            value={filter}
-            displayEmpty
-            onChange={handleSortChange}
-            input={<InputBase />}
-          >
-            <MenuItem value="">
-              <em>Ordenar</em>
-            </MenuItem>
-            <MenuItem value={"Crescente"}>Crescente</MenuItem>
-            <MenuItem value={"Decrescente"}>Decrescente</MenuItem>
-          </Select>
-        </FormControl>
-      </Paper>
-    </Box>
-    {/* {!validDoc ? ( */}
-    <Box width="50%">
-      <p className={`${classes.errorText} ${validDoc ? classes.hidden : ''}`}>Documento inválido</p>
-    </Box>
-    <Box mt={5} pr={20} pl={20} className={classes.list}>
-      <Paper classes={{root: classes.paperRoot}}>
-        <List
-          subheader={
-            <ListSubheader classes={{ root: classes.listSubHeader }} id="nested-list-subheader">
-              <p classes={{root: classes.listItem}}>Documentos</p><p>Tipo</p><p>Blacklist</p>
-            </ListSubheader>
-          }>
-          {data.documents.map((doc, index) => 
-          <>
-          <ListItem key={index} classes={{root: classes.listItem}}>
-            <ListItemText id="switch-list-label-number" primary={docMask(doc.number)} classes={{root: classes.listItemText}} />
-            <ListItemText id="switch-list-label-type" primary={getDocType(doc.number)} classes={{root: classes.listItemText}} />
-            <ListItemSecondaryAction key={index} classes={{root: classes.listItemText}}>
-              <Switch
-                edge="end"
-                onChange={handleToggle(doc.number)}
-                checked={checked.indexOf(doc.number) !== -1}
-                inputProps={{ 'aria-labelledby': 'switch-list-label-number' }}
-              />
-            </ListItemSecondaryAction>
-            <Divider className={classes.divider} orientation="horizontal" />
-          </ListItem>
-          {index !== data.documents.length - 1 ? (<Divider className={classes.horizontalDivider} orientation="horizontal" />) : (<></>)}
-        </>)}
-        </List>
-      </Paper>
-    </Box>
-    <Dialog
+  return (
+    <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" width="100%">
+      <Box mt={5} display="flex" flexDirection="column" justifyContent="center" alignItems="center" width="100%">
+        <Paper component="form" className={classes.paper}>
+          <InputBase
+            className={classes.input}
+            placeholder="Insira o CPF ou CNPJ"
+            onChange={checkDoc}
+            value={doc}
+            error={!validDoc}
+            onKeyDown={(e) => e.key === 'Enter' ? searchDoc() : null}
+            inputProps={{ 'aria-label': 'filter-cpf-cnpj' }}
+          />
+          <IconButton className={classes.iconButton} aria-label="search" onClick={searchDoc}>
+            <SearchIcon />
+          </IconButton>
+          <Divider className={classes.divider} orientation="vertical" />
+          <IconButton color="primary" className={classes.iconButton} aria-label="directions" onClick={addDoc}>
+            <AddIcon />
+          </IconButton>
+          <Divider className={classes.divider} orientation="vertical" />
+          <FormControl className={classes.formControl}>
+            {/* <InputLabel shrink id="filter-label" classes={{ formControl: classes.filter }}>Filtro</InputLabel> */}
+            <Select
+              labelId="filter-label"
+              id="demo-simple-select"
+              value={filter}
+              displayEmpty
+              onChange={handleChange}
+              input={<InputBase />}
+            >
+              <MenuItem value="">
+                <em>Filtro</em>
+              </MenuItem>
+              <MenuItem value={"cpf"}>CPF</MenuItem>
+              <MenuItem value={"cnpj"}>CNPJ</MenuItem>
+              <MenuItem value={"blacklist"}>Blacklist</MenuItem>
+            </Select>
+          </FormControl>
+          <Divider className={classes.divider} orientation="vertical" />
+          <FormControl className={classes.formControl}>
+            {/* <InputLabel shrink id="filter-label" classes={{ formControl: classes.filter }}>Filtro</InputLabel> */}
+            <Select
+              labelId="filter-label"
+              id="demo-simple-select"
+              value={sort}
+              displayEmpty
+              onChange={handleSortChange}
+              input={<InputBase />}
+            >
+              <MenuItem value="">
+                <em>Ordenar</em>
+              </MenuItem>
+              <MenuItem value={"asc"}>Crescente</MenuItem>
+              <MenuItem value={"desc"}>Decrescente</MenuItem>
+            </Select>
+          </FormControl>
+        </Paper>
+      </Box>
+      {/* {!validDoc ? ( */}
+      <Box width="50%">
+        <p className={`${classes.errorText} ${validDoc ? classes.hidden : ''}`}>Documento inválido</p>
+      </Box>
+      <Box mt={5} pr={20} pl={20} className={classes.list}>
+        <Paper classes={{ root: classes.paperRoot }}>
+          <List
+            subheader={
+              <ListSubheader classes={{ root: classes.listSubHeader }} id="nested-list-subheader">
+                <p classes={{ root: classes.listItem }}>Documentos</p><p>Tipo</p><p>Blacklist</p>
+              </ListSubheader>
+            }>
+            {data ? data.map((doc, index) =>
+              <>
+                <ListItem key={index} classes={{ root: classes.listItem }}>
+                  <Divider className={classes.divider} orientation="horizontal" />
+                  <ListItemText id="switch-list-label-number" primary={docMask(doc.document)} classes={{ root: classes.listItemText }} />
+                  <ListItemText id="switch-list-label-type" primary={getDocType(doc.document)} classes={{ root: classes.listItemText }} />
+                  <ListItemSecondaryAction key={index} classes={{ root: classes.listItemText }}>
+                    <Switch
+                      edge="end"
+                      onChange={() => handleToggle(doc)}
+                      checked={doc.blacklist}
+                      inputProps={{ 'aria-labelledby': 'switch-list-label-number' }}
+                    />
+                  </ListItemSecondaryAction>
+                </ListItem>
+                {data && index !== data.length - 1 ? (<Divider className={classes.horizontalDivider} orientation="horizontal" />) : (<></>)}
+              </>) :
+              skelLine.map((elem, index) =>
+                (<>
+                  <ListItem key={index} classes={{ root: classes.listItem }}>
+                    <Skeleton variant="text" width="20%" />
+                    <Skeleton variant="text" width="20%" />
+                    <Skeleton variant="text" width="20%" />
+                  </ListItem>
+                  {skelLine && index !== skelLine.length - 1 ? (<Divider className={classes.horizontalDivider} orientation="horizontal" />) : (<></>)}
+                </>))
+            }
+          </List>
+        </Paper>
+      </Box>
+      <Dialog
         open={openDialog}
         TransitionComponent={Transition}
         keepMounted
@@ -358,41 +328,6 @@ return (
           </Button>
         </DialogActions>
       </Dialog>
-  </Box>
-  // <Layout home>
-  //   <Head>…</Head>
-  //   <section className={utilStyles.headingMd}>…</section>
-  //   <section className={`${utilStyles.headingMd} ${utilStyles.padding1px}`}>
-  //     <h2 className={utilStyles.headingLg}>Blog</h2>
-  //     <ul className={utilStyles.list}>
-  //       {allPostsData.map(({ id, date, title }) => (
-  //         <li className={utilStyles.listItem} key={id}>
-  //           {title}
-  //           <br />
-  //           {id}
-  //           <br />
-  //           {date}
-  //         </li>
-  //       ))}
-  //     </ul>
-  //   </section>
-  // </Layout>
-)
+    </Box>
+  )
 }
-
-// export async function getServerSideProps(context) {
-//   return {
-//     props: {
-//       // props for your component
-//     }
-//   }
-// }
-
-// export async function getStaticProps() {
-//   const allPostsData = getSortedPostsData()
-//   return {
-//     props: {
-//       allPostsData
-//     }
-//   }
-// }
