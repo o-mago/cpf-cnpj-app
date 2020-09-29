@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { makeStyles } from '@material-ui/core/styles';
 import List from '@material-ui/core/List';
 import Box from '@material-ui/core/Box';
@@ -27,6 +27,7 @@ import Button from '@material-ui/core/Button';
 import { docMask } from '../utils/masks';
 import { docValidator } from '../utils/validators';
 import Skeleton from '@material-ui/lab/Skeleton';
+import LinearProgress from '@material-ui/core/LinearProgress';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
@@ -38,6 +39,11 @@ const useStyles = makeStyles((theme) => ({
     display: 'flex',
     alignItems: 'center',
     width: '50%'
+  },
+  fixed: {
+    position: 'fixed',
+    zIndex: 2,
+    top: 0
   },
   list: {
     width: '100%',
@@ -67,7 +73,9 @@ const useStyles = makeStyles((theme) => ({
   },
   errorText: {
     color: 'red',
-    fontSize: 10
+    fontSize: 10,
+    display: 'inline-block',
+    padding: '0 3px'
   },
   filter: {
     transform: 'translate(0, 10px) scale(1)'
@@ -90,6 +98,11 @@ const useStyles = makeStyles((theme) => ({
   },
   listItemText: {
     maxWidth: '50%'
+  },
+  linarLoad: {
+    position: 'fixed',
+    top: 0,
+    width: '100%'
   }
 }), {
   name: "MuiCustomStyle"
@@ -98,7 +111,7 @@ const useStyles = makeStyles((theme) => ({
 export default function Home() {
 
   const [searchPayload, setSearchPayload] = useState({
-    limit: 8,
+    limit: 10,
     page: 1
   });
   const fetcher = (url, payload) => {
@@ -113,9 +126,20 @@ export default function Home() {
   };
 
   const { data, error, mutate, isValidating } = useSWR([`${process.env.NEXT_PUBLIC_API_URL}/getDocuments`, searchPayload], (url, payload) => fetcher(url, payload));
-  const [page, setpage] = useState(1);
-  const [limitPerPage, setlimitPerPage] = useState(8);
+  // const [page, setPage] = useState(1);
+  const [limitPerPage, setlimitPerPage] = useState(10);
   const [skelLine, setSkelLine] = useState(Array.from(Array(limitPerPage).keys()));
+
+  const [infiniteScroll, setInfiniteScroll] = useState(false);
+
+  const [docData, setDocData] = useState({docs: [], lastPage: 0});
+
+  const [dialog, setDialog] = useState({
+    title: '',
+    text: ''    
+  })
+
+  const [updateLoad, setUpdateLoad] = useState(false);
 
   const classes = useStyles();
 
@@ -127,7 +151,65 @@ export default function Home() {
   const [doc, setDoc] = useState('');
   const [validDoc, setValidDoc] = useState(true);
 
+  const handleScroll = () => {
+    // To get page offset of last user
+    const lastDocLoaded = document.querySelector(
+      ".MuiList-root > .MuiListItem-container:last-child"
+    )
+    if (lastDocLoaded && !infiniteScroll && !updateLoad) {
+      // // const lastDocLoadedOffset = lastDocLoaded.offsetTop + lastDocLoaded.clientHeight;
+      // const lastDocLoadedOffset = lastDocLoaded.getBoundingClientRect().top + window.scrollY;
+      // const pageOffset = window.pageYOffset + window.innerHeight;
+      const pageOffset = Math.ceil(window.innerHeight + window.scrollY);
+      // // Detects when user scrolls down till the last user
+      console.log("test1", window.pageYOffset, window.innerHeight, pageOffset);
+      console.log("test2", document.body.offsetHeight);
+      if (pageOffset >= document.body.offsetHeight) {
+        // Stops loading
+        // console.log("test3", page, docData);
+        if (searchPayload.page < docData.lastPage) {
+          // setPage(page+1);
+          setInfiniteScroll(true);
+          setSearchPayload({...searchPayload, page: searchPayload.page+1});
+          mutate();
+          // Trigger fetch
+          // const query = router.query
+          // query.page = parseInt(userData.curPage) + 1
+          // router.push({
+          //   pathname: router.pathname,
+          //   query: query,
+          // })
+        }
+      }
+    }
+  }
+
+  useEffect(() => {
+    if(data) {
+      if(updateLoad) {
+        setUpdateLoad(false);
+      }
+      if(infiniteScroll) {
+        console.log("llkllklkl",{docs: [...docData.docs, ...data.docs], lastPage: data.lastPage});
+        setInfiniteScroll(false);
+        setDocData({docs: [...docData.docs, ...data.docs], lastPage: data.lastPage});
+      } else {
+        console.log("sadsdas", data);
+        setDocData(data);
+      }
+    }
+  }, [data]);
+
+  useEffect(() => {
+    window.addEventListener("scroll", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    }
+  });
+
   const handleToggle = async (doc) => {
+    setUpdateLoad(true);
+    setDocData({docs: docData.docs.map(elem => elem._id === doc._id ? {...elem, blacklist: !elem.blacklist} : elem), lastPage: docData.lastPage});
     await fetch(`${process.env.NEXT_PUBLIC_API_URL}/updateDocument`, {
       method: 'POST',
       headers: {
@@ -135,15 +217,23 @@ export default function Home() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({_id: doc._id, blacklist: !doc.blacklist})
-    }).then((res) => res.json())
-    mutate(data.map(elem => elem._id === doc._id ? {...elem, blacklist: !elem.blacklist} : elem));
+    }).then((res) => res.json());
+    setUpdateLoad(false);
   };
 
   const addDoc = async (event) => {
     if ((doc.length > 0 && !validDoc) || doc.length === 0) {
+      setDialog({
+        title: 'Documento inválido',
+        text: 'Documento não pode ser adicionado'
+      });
       setOpenDialog(true);
     } else {
+      setUpdateLoad(true);
       let formatedDoc = doc.replace(/\D/g,"");
+      if(searchPayload.page === docData.lastPage) {
+        setDocData({docs: [...docData.docs, {document: formatedDoc, blacklist: false}], lastPage: docData.lastPage});
+      }
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/addDocument`, {
         method: 'PUT',
         headers: {
@@ -151,8 +241,13 @@ export default function Home() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({document: doc})
-      }).then((res) => res.json())
-      mutate([...data, {document: formatedDoc, blacklist: false}]);
+      }).then((res) => res.json());
+      setUpdateLoad(false);
+      setDialog({
+        title: 'Documento adicionado',
+        text: 'Documento adicionado com sucesso'
+      });
+      setOpenDialog(true);
     }
   }
 
@@ -168,12 +263,12 @@ export default function Home() {
     }
   }
 
-  const handleChange = (event) => {
+  const handleFilterChange = (event) => {
     setFilter(event.target.value);
     setSearchPayload({
-      [event.target.value]: true,
+      filter: [event.target.value],
       sort: sort,
-      page: page,
+      page: 1,
       limit: limitPerPage,
       search: stringNumber(doc)
     });
@@ -181,13 +276,13 @@ export default function Home() {
   };
 
   const searchDoc = () => {
-    setSearchPayload({...searchPayload, search: stringNumber(doc)});
+    setSearchPayload({...searchPayload, page: 1, search: stringNumber(doc)});
     mutate();
   }
 
   const handleSortChange = (event) => {
     setSort(event.target.value);
-    setSearchPayload({...searchPayload, sort: event.target.value});
+    setSearchPayload({...searchPayload, page: 1, sort: event.target.value});
     mutate();
   }
 
@@ -209,7 +304,8 @@ export default function Home() {
 
   return (
     <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" width="100%">
-      <Box mt={5} display="flex" flexDirection="column" justifyContent="center" alignItems="center" width="100%">
+      {updateLoad ? <LinearProgress className={classes.linarLoad} /> : <></>}
+      <Box mt={3} display="flex" flexDirection="column" justifyContent="center" alignItems="center" width="100%" className={classes.fixed}>
         <Paper component="form" className={classes.paper}>
           <InputBase
             className={classes.input}
@@ -235,7 +331,7 @@ export default function Home() {
               id="demo-simple-select"
               value={filter}
               displayEmpty
-              onChange={handleChange}
+              onChange={handleFilterChange}
               input={<InputBase />}
             >
               <MenuItem value="">
@@ -265,12 +361,13 @@ export default function Home() {
             </Select>
           </FormControl>
         </Paper>
+        <Box width="50%">
+          <Paper component="form" className={`${classes.errorText} ${validDoc ? classes.hidden : ''}`}>
+            <span>Documento inválido</span>
+          </Paper>
+        </Box>
       </Box>
-      {/* {!validDoc ? ( */}
-      <Box width="50%">
-        <p className={`${classes.errorText} ${validDoc ? classes.hidden : ''}`}>Documento inválido</p>
-      </Box>
-      <Box mt={5} pr={20} pl={20} className={classes.list}>
+      <Box mt={15} pr={20} pl={20} mb={10} className={classes.list}>
         <Paper classes={{ root: classes.paperRoot }}>
           <List
             subheader={
@@ -278,7 +375,7 @@ export default function Home() {
                 <p classes={{ root: classes.listItem }}>Documentos</p><p>Tipo</p><p>Blacklist</p>
               </ListSubheader>
             }>
-            {data ? data.map((doc, index) =>
+            {(!(!infiniteScroll && !data)) && docData && docData.docs ? docData.docs.map((doc, index) =>
               <>
                 <ListItem key={index} classes={{ root: classes.listItem }}>
                   <Divider className={classes.divider} orientation="horizontal" />
@@ -293,7 +390,15 @@ export default function Home() {
                     />
                   </ListItemSecondaryAction>
                 </ListItem>
-                {data && index !== data.length - 1 ? (<Divider className={classes.horizontalDivider} orientation="horizontal" />) : (<></>)}
+                {docData && docData.docs && index !== docData.docs.length - 1 ? (<Divider className={classes.horizontalDivider} orientation="horizontal" />) : (<></>)}
+              </>) : <></>}
+              {!data ? infiniteScroll ?
+              (<>
+                <ListItem key={1} classes={{ root: classes.listItem }}>
+                  <Skeleton variant="text" width="20%" />
+                  <Skeleton variant="text" width="20%" />
+                  <Skeleton variant="text" width="20%" />
+                </ListItem>
               </>) :
               skelLine.map((elem, index) =>
                 (<>
@@ -303,8 +408,8 @@ export default function Home() {
                     <Skeleton variant="text" width="20%" />
                   </ListItem>
                   {skelLine && index !== skelLine.length - 1 ? (<Divider className={classes.horizontalDivider} orientation="horizontal" />) : (<></>)}
-                </>))
-            }
+                </>)) : <></>
+                }
           </List>
         </Paper>
       </Box>
@@ -316,10 +421,10 @@ export default function Home() {
         aria-labelledby="alert-dialog-slide-title"
         aria-describedby="alert-dialog-slide-description"
       >
-        <DialogTitle id="alert-dialog-slide-title">Documento inválido</DialogTitle>
+        <DialogTitle id="alert-dialog-slide-title">{dialog.title}</DialogTitle>
         <DialogContent>
           <DialogContentText id="alert-dialog-slide-description">
-            Documento não pode ser adicionado
+            {dialog.text}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
