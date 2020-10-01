@@ -126,7 +126,6 @@ export default function Home() {
   };
 
   const { data, error, mutate, isValidating } = useSWR([`${process.env.NEXT_PUBLIC_API_URL}/getDocuments`, searchPayload], (url, payload) => fetcher(url, payload));
-  // const [page, setPage] = useState(1);
   const [limitPerPage, setlimitPerPage] = useState(10);
   const [skelLine, setSkelLine] = useState(Array.from(Array(limitPerPage).keys()));
 
@@ -152,33 +151,16 @@ export default function Home() {
   const [validDoc, setValidDoc] = useState(true);
 
   const handleScroll = () => {
-    // To get page offset of last user
     const lastDocLoaded = document.querySelector(
       ".MuiList-root > .MuiListItem-container:last-child"
     )
     if (lastDocLoaded && !infiniteScroll && !updateLoad) {
-      // // const lastDocLoadedOffset = lastDocLoaded.offsetTop + lastDocLoaded.clientHeight;
-      // const lastDocLoadedOffset = lastDocLoaded.getBoundingClientRect().top + window.scrollY;
-      // const pageOffset = window.pageYOffset + window.innerHeight;
       const pageOffset = Math.ceil(window.innerHeight + window.scrollY);
-      // // Detects when user scrolls down till the last user
-      console.log("test1", window.pageYOffset, window.innerHeight, pageOffset);
-      console.log("test2", document.body.offsetHeight);
       if (pageOffset >= document.body.offsetHeight) {
-        // Stops loading
-        // console.log("test3", page, docData);
         if (searchPayload.page < docData.lastPage) {
-          // setPage(page+1);
           setInfiniteScroll(true);
           setSearchPayload({...searchPayload, page: searchPayload.page+1});
           mutate();
-          // Trigger fetch
-          // const query = router.query
-          // query.page = parseInt(userData.curPage) + 1
-          // router.push({
-          //   pathname: router.pathname,
-          //   query: query,
-          // })
         }
       }
     }
@@ -190,17 +172,20 @@ export default function Home() {
         setUpdateLoad(false);
       }
       if(infiniteScroll) {
-        console.log("llkllklkl",{docs: [...docData.docs, ...data.docs], lastPage: data.lastPage});
         setInfiniteScroll(false);
         setDocData({docs: [...docData.docs, ...data.docs], lastPage: data.lastPage});
       } else {
-        console.log("sadsdas", data);
         setDocData(data);
       }
     }
   }, [data]);
 
   useEffect(() => {
+    if(data && window.innerWidth === document.body.clientWidth && searchPayload.page < docData.lastPage) {
+      setInfiniteScroll(true);
+      setSearchPayload({...searchPayload, page: searchPayload.page+1});
+      mutate();
+    }
     window.addEventListener("scroll", handleScroll);
     return () => {
       window.removeEventListener("scroll", handleScroll);
@@ -264,7 +249,6 @@ export default function Home() {
   }
 
   const handleFilterChange = (event) => {
-    setFilter(event.target.value);
     setSearchPayload({
       filter: [event.target.value],
       sort: sort,
@@ -272,6 +256,7 @@ export default function Home() {
       limit: limitPerPage,
       search: stringNumber(doc)
     });
+    setFilter(event.target.value);
     mutate();
   };
 
@@ -325,7 +310,6 @@ export default function Home() {
           </IconButton>
           <Divider className={classes.divider} orientation="vertical" />
           <FormControl className={classes.formControl}>
-            {/* <InputLabel shrink id="filter-label" classes={{ formControl: classes.filter }}>Filtro</InputLabel> */}
             <Select
               labelId="filter-label"
               id="demo-simple-select"
@@ -344,7 +328,6 @@ export default function Home() {
           </FormControl>
           <Divider className={classes.divider} orientation="vertical" />
           <FormControl className={classes.formControl}>
-            {/* <InputLabel shrink id="filter-label" classes={{ formControl: classes.filter }}>Filtro</InputLabel> */}
             <Select
               labelId="filter-label"
               id="demo-simple-select"
